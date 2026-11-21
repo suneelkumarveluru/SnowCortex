@@ -1,0 +1,132 @@
+name: support_tickets
+description: >-
+  Customer support tickets for the DataSync, InsightBI and AuthGuard products.
+  Use it to analyze ticket volume, priority, resolution time and customer
+  satisfaction (CSAT).
+
+tables:
+  - name: tickets
+    description: One row per customer support ticket.
+    base_table:
+      database: SNOWCORTEX
+      schema: SUPPORT
+      table: SUPPORT_TICKETS
+
+    primary_key:
+      columns:
+        - TICKET_ID
+
+    dimensions:
+      - name: customer_name
+        synonyms: ["customer", "account", "client"]
+        description: Name of the customer organization that opened the ticket.
+        expr: CUSTOMER_NAME
+        data_type: TEXT
+        sample_values: ["Acme Corp", "Globex", "Initech"]
+
+      - name: product
+        synonyms: ["product line", "application"]
+        description: The product the ticket relates to.
+        expr: PRODUCT
+        data_type: TEXT
+        sample_values: ["DataSync", "InsightBI", "AuthGuard"]
+
+      - name: category
+        synonyms: ["ticket type", "issue type"]
+        description: Type of issue reported.
+        expr: CATEGORY
+        data_type: TEXT
+        sample_values: ["Billing", "Bug", "How-To", "Feature", "Security"]
+
+      - name: priority
+        synonyms: ["severity", "urgency"]
+        description: Ticket priority.
+        expr: PRIORITY
+        data_type: TEXT
+        sample_values: ["High", "Medium", "Low"]
+
+      - name: status
+        synonyms: ["state"]
+        description: Whether the ticket is Open or Resolved.
+        expr: STATUS
+        data_type: TEXT
+        sample_values: ["Open", "Resolved"]
+
+    time_dimensions:
+      - name: created_at
+        synonyms: ["opened at", "creation date", "date opened"]
+        description: When the ticket was created.
+        expr: CREATED_AT
+        data_type: TIMESTAMP
+
+      - name: resolved_at
+        synonyms: ["closed at", "resolution date"]
+        description: When the ticket was resolved. NULL for open tickets.
+        expr: RESOLVED_AT
+        data_type: TIMESTAMP
+
+    facts:
+      - name: csat_score
+        synonyms: ["satisfaction", "customer satisfaction score"]
+        description: Customer satisfaction rating from 1 (worst) to 5 (best). NULL for open tickets.
+        expr: CSAT_SCORE
+        data_type: NUMBER
+
+      - name: resolution_hours
+        synonyms: ["time to resolve", "resolution time"]
+        description: Hours between ticket creation and resolution. NULL for open tickets.
+        expr: DATEDIFF('minute', CREATED_AT, RESOLVED_AT) / 60.0
+        data_type: NUMBER
+
+    metrics:
+      - name: ticket_count
+        synonyms: ["number of tickets", "volume", "total tickets"]
+        description: Total number of tickets.
+        expr: COUNT(TICKET_ID)
+
+      - name: avg_csat
+        synonyms: ["average satisfaction", "mean csat"]
+        description: Average customer satisfaction score across tickets that have a score.
+        expr: AVG(CSAT_SCORE)
+
+      - name: avg_resolution_hours
+        synonyms: ["average time to resolve", "mean resolution time"]
+        description: Average hours to resolve a ticket, for resolved tickets only.
+        expr: AVG(DATEDIFF('minute', CREATED_AT, RESOLVED_AT) / 60.0)
+
+    filters:
+      - name: open_tickets
+        synonyms: ["unresolved", "backlog"]
+        description: Tickets that are still open.
+        expr: STATUS = 'Open'
+
+      - name: high_priority
+        synonyms: ["urgent", "critical"]
+        description: High priority tickets.
+        expr: PRIORITY = 'High'
+
+verified_queries:
+  - name: avg_csat_by_product
+    question: Which product has the lowest average CSAT score?
+    use_as_onboarding_question: true
+    sql: |
+      SELECT PRODUCT, AVG(CSAT_SCORE) AS avg_csat
+      FROM SNOWCORTEX.SUPPORT.SUPPORT_TICKETS
+      WHERE CSAT_SCORE IS NOT NULL
+      GROUP BY PRODUCT
+      ORDER BY avg_csat ASC
+      LIMIT 1
+    verified_at: 1760000000
+    verified_by: SnowCortex
+
+  - name: open_high_priority
+    question: How many open high priority tickets do we have per product?
+    use_as_onboarding_question: true
+    sql: |
+      SELECT PRODUCT, COUNT(TICKET_ID) AS open_high_priority_tickets
+      FROM SNOWCORTEX.SUPPORT.SUPPORT_TICKETS
+      WHERE STATUS = 'Open' AND PRIORITY = 'High'
+      GROUP BY PRODUCT
+      ORDER BY open_high_priority_tickets DESC
+    verified_at: 1760000000
+    verified_by: SnowCortex
